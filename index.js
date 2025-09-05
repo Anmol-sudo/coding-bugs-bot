@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
+import makeWASocket, { useMultiFileAuthState } from "baileys";
 import qrcode from "qrcode-terminal";
 import express from "express";
 import * as qrImage from "qrcode";
