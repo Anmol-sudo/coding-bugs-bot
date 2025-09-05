@@ -1,106 +1,105 @@
-import makeWASocket, { useMultiFileAuthState } from "baileys";
-import qrcode from "qrcode-terminal";
-import express from "express";
-import * as qrImage from "qrcode";
-import axios from "axios";
+import express from 'express';
+import axios from 'axios';
+import 'dotenv/config'; // Make sure to install this: npm install dotenv
 
 const app = express();
+app.use(express.json()); // Middleware to parse JSON bodies
+
 const PORT = process.env.PORT || 3000;
+const WP_VERIFY_TOKEN = process.env.WP_VERIFY_TOKEN; // A secret token you create
+const WP_ACCESS_TOKEN = process.env.WP_BUSINESS_ACCESS_TOKEN;
+const WP_PHONE_NUMBER_ID = process.env.WP_PHONE_NUMBER_ID; // Get this from your Meta App Dashboard
 
-let sock; // only one socket
-let latestQR = null;
+// JDoodle API credentials
+const JDOODLE_CLIENT_ID = process.env.JDOODLE_CLIENT_ID;
+const JDOODLE_CLIENT_SECRET = process.env.JDOODLE_CLIENT_SECRET;
 
-// Function to execute C++ code with JDoodle API
+// Function to execute C++ code
 async function runCpp(code) {
   try {
-    const res = await axios.post("https://api.jdoodle.com/v1/execute", {
+    const response = await axios.post("https://api.jdoodle.com/v1/execute", {
       script: code,
       language: "cpp17",
       versionIndex: "0",
-      clientId: process.env.JDOODLE_CLIENT_ID,
-      clientSecret: process.env.JDOODLE_CLIENT_SECRET,
+      clientId: JDOODLE_CLIENT_ID,
+      clientSecret: JDOODLE_CLIENT_SECRET,
     });
-    return res.data.output;
-  } catch (err) {
-    return "⚠️ Error executing code: " + err.message;
+    return response.data.output || "No output.";
+  } catch (error) {
+    console.error("JDoodle API Error:", error.response ? error.response.data : error.message);
+    return `⚠️ Error executing code: ${error.message}`;
   }
 }
 
-async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState("auth");
-  sock = makeWASocket({ auth: state });
+// Function to send a WhatsApp message
+async function sendWhatsAppMessage(to, text) {
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${WP_PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        text: { body: text },
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WP_ACCESS_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error sending WhatsApp message:", error.response ? error.response.data : error.message);
+  }
+}
 
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update;
+// ---- Webhook Endpoints ----
 
-    if (qr) {
-      latestQR = qr;
-      console.log("Scan this QR to log in:");
-      qrcode.generate(qr, { small: true });
-    }
+// 1. Webhook Verification Endpoint (for setup in Meta Dashboard)
+app.get("/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
 
-    if (connection === "open") {
-      console.log("✅ Connected to WhatsApp!");
-    } else if (connection === "close") {
-      console.log("❌ Connection closed. Reconnecting...");
-      connectToWhatsApp();
-    }
-  });
+  if (mode && token && mode === "subscribe" && token === WP_VERIFY_TOKEN) {
+    console.log("Webhook verified!");
+    res.status(200).send(challenge);
+  } else {
+    res.sendStatus(403);
+  }
+});
 
-  sock.ev.on("creds.update", saveCreds);
+// 2. Receiving Messages Endpoint
+app.post("/webhook", async (req, res) => {
+  const entry = req.body.entry?.[0];
+  const change = entry?.changes?.[0];
+  const messageData = change?.value?.messages?.[0];
 
-  // --- Listen for messages ---
-  sock.ev.on("messages.upsert", async (m) => {
-    const msg = m.messages[0];
-    if (!msg.message) return;
-
-    const text =
-      msg.message.conversation ||
-      msg.message.extendedTextMessage?.text;
-    if (!text) return;
-
+  // Check if it's a valid text message
+  if (messageData && messageData.type === 'text') {
+    const from = messageData.from; // Sender's phone number
+    const text = messageData.text.body;
     const lowerText = text.toLowerCase();
 
-    if (lowerText === "hi") {
-      await sock.sendMessage(msg.key.remoteJid, { text: "Hi, this is me your friendly coding bot! To execute code, use !run cpp <code>" });
-    }
+    let replyText = "";
 
-    if (lowerText.startsWith("!run cpp")) {
+    if (lowerText === "hi") {
+      replyText = "Hi, this is your friendly coding bot! 👋 To execute code, use:\n\n`!run cpp <code>`";
+    } else if (lowerText.startsWith("!run cpp")) {
       const code = text.replace(/!run cpp/i, "").trim();
       const output = await runCpp(code);
-      await sock.sendMessage(msg.key.remoteJid, { text: "🖥️ Output:\n" + output });
+      replyText = "🖥️ **Output:**\n```\n" + output + "\n```";
     }
-  });
-}
 
-// --- Express route to fetch QR as image ---
-app.get("/qr", async (req, res) => {
-  if (!latestQR) {
-    return res.send("QR not generated yet, please wait...");
+    if (replyText) {
+      await sendWhatsAppMessage(from, replyText);
+    }
   }
-  try {
-    const qrPng = await qrImage.toBuffer(latestQR, { type: "png" });
-    res.type("png");
-    res.send(qrPng);
-  } catch (err) {
-    res.status(500).send("Error generating QR");
-  }
+
+  res.sendStatus(200); // Always respond with 200 OK
 });
 
-// --- Example API route to send message ---
-app.get("/send", async (req, res) => {
-  const jid = req.query.jid; // phone number like "91XXXXXXXXXX@s.whatsapp.net"
-  const msg = req.query.msg || "Hello from Render!";
-  try {
-    await sock.sendMessage(jid, { text: msg });
-    res.send("Message sent!");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("Failed to send message");
-  }
-});
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  connectToWhatsApp();
+  console.log(`🚀 Server is listening on port ${PORT}`);
 });
