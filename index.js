@@ -86,7 +86,7 @@ app.post("/webhook", async (req, res) => {
     if (lowerText === "hi") {
       replyText = "Hi, this is your friendly coding bot! 👋 To execute code, use:\n\n`!run cpp <code>`";
     }else if (lowerText === "ashmeet ke bare mai kuch batao?") {
-      replyText = "Ye banda, Anmol ke har interest ko ek ladki se connect karta hai`"; 
+      replyText = "Ye banda, Anmol ke har interest ko ek ladki se connect karta hai"; 
     }
     else if (lowerText === "chaitanya ke bare mai batao?") {
       replyText = "Ye banda, Anmol ke saath baith ta hai class mai";
