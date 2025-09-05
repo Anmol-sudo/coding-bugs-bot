@@ -85,6 +85,11 @@ app.post("/webhook", async (req, res) => {
 
     if (lowerText === "hi") {
       replyText = "Hi, this is your friendly coding bot! 👋 To execute code, use:\n\n`!run cpp <code>`";
+    }else if (lowerText === "Ashmeet ke bare mai kuch batao?") {
+      replyText = "Ye banda, Anmol ke har interest ko ek ladki se connect karta hai`"; 
+    }
+    else if (lowerText === "Chaitanya ke bare mai batao") {
+      replyText = "Ye banda, Anmol ke saath baith ta hai class mai";
     } else if (lowerText.startsWith("!run cpp")) {
       const code = text.replace(/!run cpp/i, "").trim();
       const output = await runCpp(code);
