@@ -1,20 +1,20 @@
 import express from 'express';
 import axios from 'axios';
-import 'dotenv/config'; // Make sure to install this: npm install dotenv
+import 'dotenv/config'; 
 
 const app = express();
-app.use(express.json()); // Middleware to parse JSON bodies
+app.use(express.json()); 
 
 const PORT = process.env.PORT || 3000;
-const WP_VERIFY_TOKEN = process.env.WP_VERIFY_TOKEN; // A secret token you create
+const WP_VERIFY_TOKEN = process.env.WP_VERIFY_TOKEN; 
 const WP_ACCESS_TOKEN = process.env.WP_BUSINESS_ACCESS_TOKEN;
-const WP_PHONE_NUMBER_ID = process.env.WP_PHONE_NUMBER_ID; // Get this from your Meta App Dashboard
+const WP_PHONE_NUMBER_ID = process.env.WP_PHONE_NUMBER_ID; 
 
-// JDoodle API credentials
+
 const JDOODLE_CLIENT_ID = process.env.JDOODLE_CLIENT_ID;
 const JDOODLE_CLIENT_SECRET = process.env.JDOODLE_CLIENT_SECRET;
 
-// Function to execute C++ code
+
 async function runCpp(code) {
   try {
     const response = await axios.post("https://api.jdoodle.com/v1/execute", {
@@ -31,7 +31,6 @@ async function runCpp(code) {
   }
 }
 
-// Function to send a WhatsApp message
 async function sendWhatsAppMessage(to, text) {
   try {
     await axios.post(
@@ -53,9 +52,7 @@ async function sendWhatsAppMessage(to, text) {
   }
 }
 
-// ---- Webhook Endpoints ----
 
-// 1. Webhook Verification Endpoint (for setup in Meta Dashboard)
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -69,15 +66,15 @@ app.get("/webhook", (req, res) => {
   }
 });
 
-// 2. Receiving Messages Endpoint
+
 app.post("/webhook", async (req, res) => {
   const entry = req.body.entry?.[0];
   const change = entry?.changes?.[0];
   const messageData = change?.value?.messages?.[0];
 
-  // Check if it's a valid text message
+
   if (messageData && messageData.type === 'text') {
-    const from = messageData.from; // Sender's phone number
+    const from = messageData.from; 
     const text = messageData.text.body;
     const lowerText = text.toLowerCase();
 
@@ -101,7 +98,7 @@ app.post("/webhook", async (req, res) => {
     }
   }
 
-  res.sendStatus(200); // Always respond with 200 OK
+  res.sendStatus(200); 
 });
 
 
